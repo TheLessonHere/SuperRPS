@@ -10,6 +10,8 @@ const LEVEL_NAMES: Array[String] = ["", "Basic", "Silver", "Gold", "Platinum", "
 
 var type: Type
 var level: int
+## Attached weapon mod, or null. Applying a new mod replaces it.
+var mod: Mod = null
 
 
 func _init(p_type: Type, p_level: int = MIN_LEVEL) -> void:

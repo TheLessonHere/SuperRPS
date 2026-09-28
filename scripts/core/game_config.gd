@@ -26,6 +26,20 @@ const MOD_SHOP_SLOTS := 1
 const EXTRA_SLOT_WINS := 1
 const EXTRA_SLOT_WEAPON_WINS := 1
 
+## Copies of each weapon type in the shared pool, by weapon level 1-5.
+const POOL_COPIES_PER_LEVEL: Array[int] = [18, 15, 13, 11, 9]
+## Shop odds (%) for each weapon level, by player level (row N-1 is player level N).
+const SHOP_LEVEL_ODDS: Array = [
+	[100],
+	[70, 30],
+	[50, 35, 15],
+	[35, 35, 20, 10],
+	[25, 30, 25, 15, 5],
+]
+
 const TRIPLE_COUNT := 3
 ## Can't be paired against the same opponent within this many fights.
 const REMATCH_COOLDOWN := 3
+## Safety cap so two identical final boards can't draw forever; remaining
+## players are then ranked by health.
+const MAX_ROUNDS := 50

@@ -90,7 +90,34 @@ Total 1–4. P1 takes 3 + 3 = **6** damage.
 - With an odd number of living players, one player fights a **ghost**: a copy of the
   most recently eliminated player's board.
 
+## Implementation decisions (placeholders; change if they feel wrong)
+
+- **Shop:** a bought weapon leaves an empty shop slot until the next roll. Unbought
+  offers go back to the pool on each roll and at the start of each turn. Leveling
+  up doesn't refresh the shop; the new slot appears on the next roll.
+- **Pool:** each weapon level is drawn by the odds for your player level. Within a
+  level, the type is weighted by copies left. Sold weapons return 1 copy of their
+  level, never above the starting count. Weapons consumed by a triple don't return.
+- **Mods** aren't pooled; the shop's mod slot offers any mod with tier ≤ player level.
+- **Triple placement:** if any of the 3 were on the board, the new weapon takes the
+  leftmost of their slots; otherwise it goes to the inventory.
+- **Triple reward:** the mod and the weapon are both rolled when the triple happens.
+  The one you don't pick is discarded; an unpicked weapon goes back to the pool.
+- **Pending choices** (which mod to keep, triple reward) block everything except
+  selling and choosing. If the buy phase ends first, they auto-resolve: first mod,
+  and the weapon reward. A reward with no inventory room is forfeited.
+- **Simultaneous eliminations** are placed by health: the least negative places
+  highest and becomes the ghost.
+- **Round cap:** after `MAX_ROUNDS` (50), the remaining players are ranked by health.
+  This is a safety net; see the stall note below.
+- **Odd lobby with no one eliminated yet** (only possible in custom lobby sizes):
+  one random player sits the round out.
+
 ## Open questions / assumptions
+
+- **Late-game draws:** when both boards are all Diamond, each lane goes 5–0 or 0–0,
+  so evenly matched boards draw a lot (about 22% of all fights in bot sims). Worth
+  watching once mods and heroes exist.
 
 - **Pool:** copies per weapon per level, and roll odds per player level.
 - **Level-up base costs:** placeholders `[5, 7, 8, 9]` for levels 2–5.

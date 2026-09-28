@@ -49,7 +49,7 @@ static func resolve(level_a: int, board_a: Array[Weapon], level_b: int, board_b:
 			durability[side].append(weapon.max_durability() if weapon else 0)
 
 	# Every lane with a weapon left swings once per round until all are spent.
-	var round := 0
+	var swing_round := 0
 	while true:
 		var any_swing := false
 		for lane in lanes:
@@ -76,14 +76,14 @@ static func resolve(level_a: int, board_a: Array[Weapon], level_b: int, board_b:
 			durability[SIDE_B][lane] = maxi(dur_b - 1, 0)
 			result.events.append({
 				kind = "swing",
-				round = round,
+				round = swing_round,
 				lane = lane,
 				winner = swing_winner,
 				durability = [durability[SIDE_A][lane], durability[SIDE_B][lane]],
 			})
 		if not any_swing:
 			break
-		round += 1
+		swing_round += 1
 
 	var diff := result.wins[SIDE_A] - result.wins[SIDE_B]
 	if diff != 0:
