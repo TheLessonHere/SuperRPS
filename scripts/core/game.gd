@@ -11,7 +11,8 @@ var rng := RandomNumberGenerator.new()
 var round_number := 0
 ## Player id -> final placement (1 = winner).
 var placements := {}
-## One entry per fight: {round, ids = [a, b], ghost: bool, result: Combat.Result}.
+## One entry per fight: {round, ids = [a, b], levels, boards, ghost: bool,
+## result: Combat.Result}. Boards are snapshots of the slot order at fight time.
 ## With a ghost, ids[1] is the eliminated player the ghost copies.
 var fight_log: Array[Dictionary] = []
 
@@ -38,10 +39,16 @@ func is_over() -> bool:
 func simulate() -> void:
 	while not is_over():
 		start_buy_phase()
-		for p in alive():
-			Bot.take_turn(p, rng)
+		play_bot_turns()
 		run_combat()
 	finish()
+
+
+## Runs the buy phase for every living player except `human_id`.
+func play_bot_turns(human_id: int = -1) -> void:
+	for p in alive():
+		if p.id != human_id:
+			Bot.take_turn(p, rng)
 
 
 func start_buy_phase() -> void:
@@ -81,6 +88,8 @@ func run_combat() -> void:
 		fight_log.append({
 			round = round_number,
 			ids = [a.id, b.id],
+			levels = [a.level, b.level],
+			boards = [a.board.duplicate(), b.board.duplicate()],
 			ghost = b.player == null,
 			result = result,
 		})
