@@ -22,12 +22,34 @@ func _run() -> void:
 	await _frames(3)
 	var me: Player = _main.me
 
-	# Buy the first shop weapon and play it through the UI handlers.
+	# Drag with real mouse events: shop -> board slot buys and plays.
+	var bought: Weapon = me.shop_weapons[0]
+	await _drag(_main._shop_row.get_child(0), _main._board_row.get_child(0), "0_dragging")
+	if me.board[0] != bought:
+		return _fail("dragging a shop card onto the board didn't buy and play it")
+	if not _main._selected.is_empty():
+		return _fail("a drag also registered as a click")
+	# Board -> another slot is locked at level 1; board -> inventory benches.
+	await _drag(_main._board_row.get_child(0), _main._inventory_row.get_child(4))
+	if me.board[0] != null or me.inventory.size() != 1:
+		return _fail("dragging a board card to the inventory didn't bench it")
+	# Inventory -> shop sells.
+	await _drag(_main._inventory_row.get_child(0), _main._shop_row)
+	if not me.inventory.is_empty() or me.gold != GameConfig.WEAPON_SELL_VALUE:
+		return _fail("dragging a card onto the shop didn't sell it")
+	me.gold = GameConfig.ROLL_COST + GameConfig.WEAPON_COST
+	_main._on_roll()
+
+	# Buy the first shop weapon and play it with clicks.
 	_main._on_shop_weapon(0)
 	_main._on_inventory_slot(0)
 	_main._on_board_slot(0)
 	if me.board[0] == null:
 		return _fail("buying and playing a weapon didn't put it on the board")
+	_main._on_level_up()
+	_main._on_freeze()
+	if not me.shop_frozen:
+		return _fail("freeze button did nothing")
 	await _shot("1_buy_phase")
 
 	var first_fight := true
@@ -64,6 +86,38 @@ func _shot(shot_name: String) -> void:
 	if FileAccess.file_exists(path) and shot_name == "choice":
 		return
 	root.get_texture().get_image().save_png(path)
+
+
+## Presses on `from`, moves in steps to `to` and releases, like a real mouse.
+## Optionally screenshots mid-drag.
+func _drag(from: Control, to: Control, shot_name: String = "") -> void:
+	var start := from.get_global_rect().get_center()
+	var end := to.get_global_rect().get_center()
+	_mouse_button(start, true)
+	await process_frame
+	var steps := 12
+	for i in range(1, steps + 1):
+		var motion := InputEventMouseMotion.new()
+		motion.position = start.lerp(end, float(i) / steps)
+		motion.global_position = motion.position
+		motion.relative = (end - start) / steps
+		motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+		root.push_input(motion, true)
+		await process_frame
+	if not shot_name.is_empty():
+		await _shot(shot_name)
+	_mouse_button(end, false)
+	await _frames(2)
+
+
+func _mouse_button(at: Vector2, pressed: bool) -> void:
+	var event := InputEventMouseButton.new()
+	event.position = at
+	event.global_position = at
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	event.pressed = pressed
+	root.push_input(event, true)
 
 
 func _frames(count: int) -> void:

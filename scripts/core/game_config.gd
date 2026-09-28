@@ -9,7 +9,7 @@ const STARTING_HEALTH := 25
 const MIN_PLAYER_LEVEL := 1
 const MAX_PLAYER_LEVEL := 5
 ## Base cost to reach level N is LEVEL_UP_BASE_COST[N - 2]. Drops by 1 each turn you don't level.
-const LEVEL_UP_BASE_COST: Array[int] = [5, 7, 8, 9]
+const LEVEL_UP_BASE_COST: Array[int] = [5, 9, 11, 13]
 
 const STARTING_GOLD := 3
 const GOLD_PER_TURN_INCREASE := 1

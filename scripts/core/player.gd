@@ -25,6 +25,8 @@ var level := GameConfig.MIN_PLAYER_LEVEL
 var gold := 0
 var turn := 0
 var level_up_cost: int = GameConfig.LEVEL_UP_BASE_COST[0]
+## Turn each level was reached; index 0 is level 2. For stats and balance sims.
+var level_up_turns: Array[int] = []
 ## Battle slots; size equals level. Empty slots are null.
 var board: Array[Weapon] = [null]
 ## The hand: Weapons and Mods, up to INVENTORY_SIZE.
@@ -32,6 +34,8 @@ var inventory: Array[RefCounted] = []
 ## Current shop offers. Buying one leaves a null in its slot until the next roll.
 var shop_weapons: Array[Weapon] = []
 var shop_mod: Mod = null
+## A frozen shop keeps its unbought offers into the next turn. Rolling unfreezes.
+var shop_frozen := false
 ## Choices the player must make, oldest first. While any are pending, only
 ## selling and choosing are allowed. Each entry is one of:
 ##   {kind = Choice.PICK_MOD, weapon, options: Array[Mod]}
@@ -63,7 +67,11 @@ func start_turn() -> void:
 	if turn > 1 and level < GameConfig.MAX_PLAYER_LEVEL:
 		level_up_cost = maxi(level_up_cost - 1, 0)
 	gold = mini(GameConfig.STARTING_GOLD + (turn - 1) * GameConfig.GOLD_PER_TURN_INCREASE, GameConfig.MAX_GOLD)
-	_refresh_shop()
+	if shop_frozen:
+		shop_frozen = false
+		_refill_shop()
+	else:
+		_refresh_shop()
 
 
 func roll() -> ActionResult:
@@ -72,7 +80,14 @@ func roll() -> ActionResult:
 	if gold < GameConfig.ROLL_COST:
 		return ActionResult.NOT_ENOUGH_GOLD
 	gold -= GameConfig.ROLL_COST
+	shop_frozen = false
 	_refresh_shop()
+	return ActionResult.OK
+
+
+## Freezing is free and can be toggled any number of times.
+func toggle_freeze() -> ActionResult:
+	shop_frozen = not shop_frozen
 	return ActionResult.OK
 
 
@@ -131,6 +146,7 @@ func level_up() -> ActionResult:
 		return ActionResult.NOT_ENOUGH_GOLD
 	gold -= level_up_cost
 	level += 1
+	level_up_turns.append(turn)
 	board.append(null)
 	level_up_cost = GameConfig.LEVEL_UP_BASE_COST[level - 1] if level < GameConfig.MAX_PLAYER_LEVEL else 0
 	return ActionResult.OK
@@ -236,11 +252,22 @@ func _refresh_shop() -> void:
 		if weapon != null:
 			_pool.put_back(weapon)
 	shop_weapons.clear()
-	for i in level:
+	shop_mod = null
+	_refill_shop()
+
+
+## Keeps current offers and fills bought or newly unlocked slots, like a frozen
+## Battlegrounds tavern.
+func _refill_shop() -> void:
+	var kept := shop_weapons.filter(func(w: Weapon) -> bool: return w != null)
+	shop_weapons.assign(kept)
+	while shop_weapons.size() < level:
 		var weapon := _pool.draw_for_shop(_rng, level)
-		if weapon != null:
-			shop_weapons.append(weapon)
-	shop_mod = _mods.random_up_to_tier(_rng, level)
+		if weapon == null:
+			break
+		shop_weapons.append(weapon)
+	if shop_mod == null:
+		shop_mod = _mods.random_up_to_tier(_rng, level)
 
 
 func _sell(item: RefCounted) -> void:

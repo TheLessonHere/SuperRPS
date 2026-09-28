@@ -23,6 +23,9 @@ Leveling up costs gold, like the Battlegrounds tavern upgrade:
 - On turn 2 it's affordable but takes all your gold.
 - Each level costs more than the last.
 - Each turn you don't level, the current cost drops by 1.
+- Base costs to reach levels 2/3/4/5: **5 / 9 / 11 / 13**. These are steep enough that
+  players hold each level for a turn or two. In bot sims, levels are reached around
+  turns 2 / 5 / 7 / 10, and about two thirds of players ever reach level 5.
 
 ## Buy phase
 
@@ -30,6 +33,9 @@ Leveling up costs gold, like the Battlegrounds tavern upgrade:
 - Weapons cost 3g and sell for 1g.
 - Mods cost 0g or more, and sell for 0g unless the mod says otherwise.
 - Rolling the shop costs 1g.
+- **Freeze** (free, toggleable): the shop's unbought weapons and mod carry over to
+  next turn instead of refreshing. Bought slots, and any new slot from leveling up,
+  are filled with fresh offers. The freeze lasts one turn, and rolling unfreezes.
 - Inventory (hand) holds 10 items, weapons or mods. Purchases go to the inventory.
   If it's full, you can't buy until you sell something from the inventory or the board.
 - Weapons can be played from the inventory into battle slots and moved between slots.
@@ -120,6 +126,5 @@ Total 1–4. P1 takes 3 + 3 = **6** damage.
   watching once mods and heroes exist.
 
 - **Pool:** copies per weapon per level, and roll odds per player level.
-- **Level-up base costs:** placeholders `[5, 7, 8, 9]` for levels 2–5.
 - **Buy-phase timer length.**
 - **Mod and hero lists.**

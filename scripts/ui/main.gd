@@ -1,15 +1,16 @@
 extends Control
 ## Rough playable prototype: you against 5 bots. Placeholder UI built in code.
 ##
-## Controls (click or tap):
-## - Shop card: buy it.
-## - Inventory weapon, then a board slot: play it (swaps if the slot is taken).
-## - Board weapon, then another board slot: move it.
-## - Board weapon, then any inventory slot: move it back to the inventory.
-## - Inventory mod, then a board weapon: apply it.
-## - Select something you own, then Sell.
+## Every action works by dragging or by clicking (click a card, then where it
+## should go):
+## - Shop card to inventory or a board slot: buy it (and play it).
+## - Inventory weapon to a board slot: play it (swaps if the slot is taken).
+## - Board weapon to another board slot: move it; to the inventory: bench it.
+## - Mod (inventory or shop) to a board weapon: apply it.
+## - Board or inventory card to the shop: sell it. Clicking: select, then Sell.
 
 const HUMAN_ID := 0
+const FROZEN_TINT := Color(0.7, 0.85, 1.3)
 const MESSAGES := {
 	Player.ActionResult.NOT_ENOUGH_GOLD: "Not enough gold.",
 	Player.ActionResult.INVENTORY_FULL: "Inventory is full. Sell something first.",
@@ -26,6 +27,8 @@ var _selected := {}
 var _info := Label.new()
 var _level_button := Button.new()
 var _roll_button := Button.new()
+var _freeze_button := Button.new()
+var _shop_heading: Label
 var _sell_button := Button.new()
 var _fight_button := Button.new()
 var _shop_row := HBoxContainer.new()
@@ -68,6 +71,10 @@ func _on_shop_mod() -> void:
 
 func _on_level_up() -> void:
 	_act(me.level_up())
+
+
+func _on_freeze() -> void:
+	_act(me.toggle_freeze())
 
 
 func _on_roll() -> void:
@@ -140,6 +147,23 @@ func _on_fight() -> void:
 	_refresh()
 
 
+func _buy_weapon_to_slot(shop_index: int, slot: int) -> void:
+	var weapon := me.shop_weapons[shop_index]
+	var result := me.buy_weapon(shop_index)
+	var bought := me.inventory.find(weapon)
+	# If the purchase completed a triple, the weapon is already combined.
+	if result == Player.ActionResult.OK and bought >= 0 and me.pending.is_empty():
+		result = me.play_weapon(bought, slot)
+	_act(result)
+
+
+func _buy_mod_to_slot(slot: int) -> void:
+	var result := me.buy_mod()
+	if result == Player.ActionResult.OK:
+		result = me.apply_mod(me.inventory.size() - 1, slot)
+	_act(result)
+
+
 func _act(result: Player.ActionResult) -> void:
 	_status.text = MESSAGES.get(result, "")
 	_selected = {}
@@ -171,6 +195,97 @@ func _player_name(id: int) -> String:
 	return "You" if id == HUMAN_ID else "Bot %d" % id
 
 
+# --- Drag and drop -------------------------------------------------------
+# Drag sources and drop targets are {zone, index}. Zones: "shop", "shop_mod",
+# "board", "inventory". Dropping on the shop sells, like Battlegrounds.
+
+## Makes `card` a drop target, and a drag source if `source` is given.
+func _wire_drag(card: ItemCard, target: Dictionary, source: Dictionary = {}, item: RefCounted = null) -> void:
+	card.set_meta("drop_target", target)
+	card.set_drag_forwarding(
+		func(_at: Vector2) -> Variant: return _begin_drag(card, source, item),
+		func(_at: Vector2, data: Variant) -> bool: return _drop_action(data, target).is_valid(),
+		func(_at: Vector2, data: Variant) -> void: _drop_action(data, target).call(),
+	)
+
+
+## Lets drops land in the empty space of a row, not just on its cards.
+func _wire_row_drop(row: Control, target: Dictionary) -> void:
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	row.set_drag_forwarding(
+		Callable(),
+		func(_at: Vector2, data: Variant) -> bool: return _drop_action(data, target).is_valid(),
+		func(_at: Vector2, data: Variant) -> void: _drop_action(data, target).call(),
+	)
+
+
+func _begin_drag(card: ItemCard, source: Dictionary, item: RefCounted) -> Variant:
+	if source.is_empty() or _combat.visible or _choice_overlay.visible:
+		return null
+	_selected = {}
+	var preview := Control.new()
+	var ghost := ItemCard.new()
+	ghost.show_item(item)
+	ghost.position = -ItemCard.CARD_SIZE / 2
+	ghost.modulate.a = 0.85
+	preview.add_child(ghost)
+	card.set_drag_preview(preview)
+	return source
+
+
+## What dropping `source` on `target` does, or an invalid Callable if nothing.
+func _drop_action(source: Variant, target: Dictionary) -> Callable:
+	if not (source is Dictionary and source.has("zone")) or not me.pending.is_empty():
+		return Callable()
+	var from: String = source.zone
+	match target.zone:
+		"shop":
+			if from == "board":
+				return func() -> void: _act(me.sell_board(source.index))
+			if from == "inventory":
+				return func() -> void: _act(me.sell_inventory(source.index))
+		"inventory":
+			if from == "shop":
+				return _on_shop_weapon.bind(source.index)
+			if from == "shop_mod":
+				return _on_shop_mod
+			if from == "board":
+				return func() -> void: _act(me.bench_weapon(source.index))
+		"board":
+			var slot: int = target.index
+			var has_weapon := me.board[slot] != null
+			match from:
+				"board":
+					if source.index != slot:
+						return func() -> void: _act(me.move_weapon(source.index, slot))
+				"inventory":
+					var item: RefCounted = me.inventory[source.index]
+					if item is Weapon:
+						return func() -> void: _act(me.play_weapon(source.index, slot))
+					if has_weapon and item.kind == Mod.Kind.WEAPON:
+						return func() -> void: _act(me.apply_mod(source.index, slot))
+				"shop":
+					return _buy_weapon_to_slot.bind(source.index, slot)
+				"shop_mod":
+					if has_weapon and me.shop_mod.kind == Mod.Kind.WEAPON:
+						return _buy_mod_to_slot.bind(slot)
+	return Callable()
+
+
+## Highlights every valid drop spot while a drag is in progress.
+func _notification(what: int) -> void:
+	if game == null:
+		return
+	if what == NOTIFICATION_DRAG_BEGIN:
+		var data: Variant = get_viewport().gui_get_drag_data()
+		for row: Container in [_shop_row, _board_row, _inventory_row]:
+			for card in row.get_children():
+				if card is ItemCard and card.has_meta("drop_target"):
+					card.set_drop_highlight(_drop_action(data, card.get_meta("drop_target")).is_valid())
+	elif what == NOTIFICATION_DRAG_END:
+		_refresh()
+
+
 # --- Display -------------------------------------------------------------
 
 func _refresh() -> void:
@@ -195,17 +310,26 @@ func _fill_shop() -> void:
 		if me.shop_weapons[i] != null:
 			card.show_weapon(me.shop_weapons[i])
 			card.set_footer("%dg" % GameConfig.WEAPON_COST)
+			_wire_drag(card, {zone = "shop"}, {zone = "shop", index = i}, me.shop_weapons[i])
 		else:
 			card.show_empty("Sold")
+			_wire_drag(card, {zone = "shop"})
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(24, 0)
+	spacer.mouse_filter = Control.MOUSE_FILTER_PASS
 	_shop_row.add_child(spacer)
 	var mod_card := _add_card(_shop_row, _on_shop_mod)
 	if me.shop_mod != null:
 		mod_card.show_mod(me.shop_mod)
 		mod_card.set_footer("%dg" % me.shop_mod.cost)
+		_wire_drag(mod_card, {zone = "shop"}, {zone = "shop_mod", index = 0}, me.shop_mod)
 	else:
 		mod_card.show_empty("No mod")
+		_wire_drag(mod_card, {zone = "shop"})
+	_shop_heading.text = "Shop (frozen until next turn)" if me.shop_frozen else "Shop"
+	_freeze_button.text = "Unfreeze" if me.shop_frozen else "Freeze"
+	for card in _shop_row.get_children():
+		card.modulate = FROZEN_TINT if me.shop_frozen else Color.WHITE
 
 
 func _fill_board() -> void:
@@ -215,10 +339,14 @@ func _fill_board() -> void:
 		if slot >= me.board.size():
 			card.show_empty("Locked")
 			card.disabled = true
-		elif me.board[slot] != null:
+			continue
+		var here := {zone = "board", index = slot}
+		if me.board[slot] != null:
 			card.show_weapon(me.board[slot])
+			_wire_drag(card, here, here, me.board[slot])
 		else:
 			card.show_empty("Empty")
+			_wire_drag(card, here)
 		card.set_selected(_is_selected("board", slot))
 
 
@@ -228,10 +356,10 @@ func _fill_inventory() -> void:
 		var card := _add_card(_inventory_row, _on_inventory_slot.bind(i))
 		if i < me.inventory.size():
 			var item: RefCounted = me.inventory[i]
-			if item is Weapon:
-				card.show_weapon(item)
-			else:
-				card.show_mod(item)
+			card.show_item(item)
+			_wire_drag(card, {zone = "inventory"}, {zone = "inventory", index = i}, item)
+		else:
+			_wire_drag(card, {zone = "inventory"})
 		card.set_selected(_is_selected("inventory", i))
 
 
@@ -322,16 +450,18 @@ func _build_ui() -> void:
 	_sell_button.text = "Sell"
 	_fight_button.text = "Fight!"
 	var actions := [
-		[_level_button, _on_level_up], [_roll_button, _on_roll], [_sell_button, _on_sell], [_fight_button, _on_fight],
+		[_level_button, _on_level_up], [_roll_button, _on_roll], [_freeze_button, _on_freeze],
+		[_sell_button, _on_sell], [_fight_button, _on_fight],
 	]
 	for pair: Array in actions:
 		var button: Button = pair[0]
-		button.custom_minimum_size = Vector2(130, 44)
+		button.custom_minimum_size = Vector2(110, 44)
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(pair[1])
 		top.add_child(button)
 
-	main.add_child(_heading("Shop"))
+	_shop_heading = _heading("Shop")
+	main.add_child(_shop_heading)
 	main.add_child(_shop_row)
 	main.add_child(_heading("Board"))
 	main.add_child(_board_row)
@@ -339,11 +469,13 @@ func _build_ui() -> void:
 	main.add_child(_inventory_row)
 	for row: HBoxContainer in [_shop_row, _board_row, _inventory_row]:
 		row.add_theme_constant_override("separation", 6)
+	_wire_row_drop(_shop_row, {zone = "shop"})
+	_wire_row_drop(_inventory_row, {zone = "inventory"})
 	_status.add_theme_color_override("font_color", Color("ff9a8a"))
 	main.add_child(_status)
 	var help := Label.new()
-	help.text = "Click a shop card to buy. Click an inventory weapon, then a board slot, to play it. " \
-		+ "Click a board weapon, then another slot to move it, or the inventory to bench it."
+	help.text = "Drag cards to buy, play, move or apply mods. Drag onto the shop to sell. " \
+		+ "Or click a card, then click where it should go."
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	help.modulate = Color(1, 1, 1, 0.5)
 	main.add_child(help)

@@ -39,9 +39,10 @@ func test_level_up_curve() -> void:
 	assert_eq(p.level_up(), OK, "turn 2 level-up")
 	assert_eq(p.gold, 0, "turn 2 level-up takes all gold")
 	assert_eq(p.board.size(), 2)
-	assert_eq(p.level_up_cost, 7)
+	var level_3_cost: int = GameConfig.LEVEL_UP_BASE_COST[1]
+	assert_eq(p.level_up_cost, level_3_cost)
 	p.start_turn()
-	assert_eq(p.level_up_cost, 6, "cost drops each turn you don't level")
+	assert_eq(p.level_up_cost, level_3_cost - 1, "cost drops each turn you don't level")
 
 
 func test_shop_size_matches_level() -> void:
@@ -196,3 +197,55 @@ func test_reroll_returns_offers_to_pool() -> void:
 	p.gold = 1
 	p.roll()
 	assert_eq(pool.count_at_level(1), before)
+
+
+func test_frozen_shop_carries_over_one_turn() -> void:
+	var p := _player()
+	p.start_turn()
+	var offer := p.shop_weapons[0]
+	p.toggle_freeze()
+	p.start_turn()
+	assert_eq(p.shop_weapons[0], offer, "frozen offer kept")
+	assert_true(not p.shop_frozen, "freeze lasts one turn")
+	p.start_turn()
+	assert_true(p.shop_weapons[0] != offer, "unfrozen shop refreshes")
+
+
+func test_frozen_shop_refills_bought_and_new_slots() -> void:
+	var p := _player()
+	p.level = 2
+	p.board = [null, null] as Array[Weapon]
+	p.start_turn()
+	var kept := p.shop_weapons[1]
+	p.gold = GameConfig.WEAPON_COST
+	p.buy_weapon(0)
+	p.toggle_freeze()
+	p.level = 3
+	p.start_turn()
+	assert_eq(p.shop_weapons.size(), 3, "bought and newly unlocked slots are filled")
+	assert_eq(p.shop_weapons[0], kept)
+
+
+func test_freeze_keeps_unbought_mod() -> void:
+	var p := _player([Mod.make(&"sharp"), Mod.make(&"heavy")] as Array[Mod])
+	p.start_turn()
+	var mod := p.shop_mod
+	p.toggle_freeze()
+	p.start_turn()
+	assert_eq(p.shop_mod, mod)
+
+
+func test_rolling_unfreezes() -> void:
+	var p := _player()
+	p.start_turn()
+	p.toggle_freeze()
+	p.gold = GameConfig.ROLL_COST
+	p.roll()
+	assert_true(not p.shop_frozen)
+
+
+func test_freeze_toggles_off() -> void:
+	var p := _player()
+	p.toggle_freeze()
+	p.toggle_freeze()
+	assert_true(not p.shop_frozen)

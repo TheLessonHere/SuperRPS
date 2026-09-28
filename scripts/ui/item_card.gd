@@ -16,6 +16,7 @@ const LEVEL_COLORS: Array[Color] = [
 const MOD_COLOR := Color("3d8a5a")
 const EMPTY_FILL := Color(1, 1, 1, 0.05)
 const EMPTY_BORDER := Color(1, 1, 1, 0.15)
+const DROP_COLOR := Color("7dff9a")
 
 var _title := Label.new()
 var _subtitle := Label.new()
@@ -24,6 +25,7 @@ var _footer := Label.new()
 var _fill := EMPTY_FILL
 var _border := EMPTY_BORDER
 var _selected := false
+var _drop_highlight := false
 
 
 func _init() -> void:
@@ -66,6 +68,15 @@ func show_mod(mod: Mod) -> void:
 	_apply_style()
 
 
+func show_item(item: RefCounted) -> void:
+	if item is Weapon:
+		show_weapon(item)
+	elif item is Mod:
+		show_mod(item)
+	else:
+		show_empty()
+
+
 func show_empty(text: String = "") -> void:
 	_fill = EMPTY_FILL
 	_border = EMPTY_BORDER
@@ -86,6 +97,12 @@ func set_selected(selected: bool) -> void:
 	_apply_style()
 
 
+## Marks the card as a valid drop spot during a drag.
+func set_drop_highlight(highlighted: bool) -> void:
+	_drop_highlight = highlighted
+	_apply_style()
+
+
 func flash() -> void:
 	modulate = Color(1.8, 1.8, 1.8)
 	create_tween().tween_property(self, "modulate", Color.WHITE, 0.3)
@@ -94,8 +111,13 @@ func flash() -> void:
 func _apply_style() -> void:
 	var style := StyleBoxFlat.new()
 	style.bg_color = _fill
-	style.border_color = Color.WHITE if _selected else _border
-	style.set_border_width_all(5 if _selected else 3)
+	if _selected:
+		style.border_color = Color.WHITE
+	elif _drop_highlight:
+		style.border_color = DROP_COLOR
+	else:
+		style.border_color = _border
+	style.set_border_width_all(5 if _selected or _drop_highlight else 3)
 	style.set_corner_radius_all(8)
 	var hover := style.duplicate() as StyleBoxFlat
 	hover.bg_color = _fill.lightened(0.15)
